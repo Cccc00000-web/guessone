@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>猜數字 1A2B - 版本一</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 500px; margin: 30px auto; padding: 20px; background-color: #f4f6f9; }
+    .card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h1 { margin-top: 0; text-align: center; color: #333; }
+    .controls { margin-bottom: 15px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    input[type="text"] { font-size: 18px; padding: 8px; width: 60%; box-sizing: border-box; }
+    button { padding: 9px 15px; font-size: 15px; cursor: pointer; border: none; border-radius: 4px; background: #007bff; color: white; }
+    button:hover { background: #0056b3; }
+    button.btn-reset { background: #6c757d; }
+    button.btn-reset:hover { background: #5a6268; }
+    .debug-box { background: #fff3cd; color: #856404; padding: 10px; border-radius: 4px; margin-bottom: 15px; display: none; font-weight: bold; }
+    .msg { font-weight: bold; margin: 10px 0; color: #d9534f; }
+    .history { margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px; }
+    .history-item { padding: 6px 0; border-bottom: 1px dotted #ccc; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>猜四位數字 (1A2B) - V1</h1>
+    
+    <div class="controls">
+      <label>
+        <input type="checkbox" id="debugToggle" onchange="toggleDebug()"> 💡 開啟除錯模式
+      </label>
+      <button class="btn-reset" onclick="initGame()">🔄 重新開始</button>
+    </div>
+
+    <div id="debugBox" class="debug-box"></div>
+
+    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+      <input type="text" id="guessInput" placeholder="請輸入 4 個不重複數字" maxlength="4" autocomplete="off">
+      <button onclick="makeGuess()" id="submitBtn">送出猜測</button>
+    </div>
+
+    <div id="msgBox" class="msg"></div>
+
+    <div class="history">
+      <h3>當前猜測紀錄：</h3>
+      <div id="guessList"></div>
+    </div>
+  </div>
+
+  <script>
+    let answer = "";
+    let isGameOver = false;
+
+    function generateAnswer() {
+      let digits = ["0","1","2","3","4","5","6","7","8","9"];
+      digits.sort(() => Math.random() - 0.5);
+      return digits.slice(0, 4).join("");
+    }
+
+    function initGame() {
+      answer = generateAnswer();
+      isGameOver = false;
+      document.getElementById("guessInput").value = "";
+      document.getElementById("guessInput").disabled = false;
+      document.getElementById("submitBtn").disabled = false;
+      document.getElementById("msgBox").innerText = "";
+      document.getElementById("guessList").innerHTML = "";
+      updateDebugDisplay();
+    }
+
+    function toggleDebug() {
+      updateDebugDisplay();
+    }
+
+    function updateDebugDisplay() {
+      const isChecked = document.getElementById("debugToggle").checked;
+      const debugBox = document.getElementById("debugBox");
+      if (isChecked) {
+        debugBox.style.display = "block";
+        debugBox.innerText = `[除錯顯示] 當前局解答：${answer}`;
+      } else {
+        debugBox.style.display = "none";
+      }
+    }
+
+    function isValidGuess(val) {
+      if (val.length !== 4 || !/^\d{4}$/.test(val)) return false;
+      let set = new Set(val.split(""));
+      return set.size === 4;
+    }
+
+    function checkAB(ans, input) {
+      let a = 0, b = 0;
+      for (let i = 0; i < 4; i++) {
+        if (input[i] === ans[i]) {
+          a++;
+        } else if (ans.includes(input[i])) {
+          b++;
+        }
+      }
+      return `${a}A${b}B`;
+    }
+
+    function makeGuess() {
+      if (isGameOver) return;
+      const inputEl = document.getElementById("guessInput");
+      const msgEl = document.getElementById("msgBox");
+      const val = inputEl.value.trim();
+
+      if (!isValidGuess(val)) {
+        msgEl.innerText = "❌ 請輸入 4 個「數字不重複」的四位數（可包含 0 開頭）！";
+        return;
+      }
+
+      msgEl.innerText = "";
+      const result = checkAB(answer, val);
+      
+      const listEl = document.getElementById("guessList");
+      const item = document.createElement("div");
+      item.className = "history-item";
+      item.innerText = `猜測：${val} ➔ 結果：${result}`;
+      listEl.prepend(item);
+
+      inputEl.value = "";
+      inputEl.focus();
+
+      if (result === "4A0B") {
+        msgEl.innerText = "🎉 恭喜完成本局！結果：4A0B！";
+        msgEl.style.color = "#28a745";
+        isGameOver = true;
+        document.getElementById("guessInput").disabled = true;
+        document.getElementById("submitBtn").disabled = true;
+      }
+    }
+
+    window.onload = initGame;
+  </script>
+</body>
+</html>
