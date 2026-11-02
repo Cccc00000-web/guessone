@@ -3,32 +3,33 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>猜數字 1A2B - 版本一</title>
+  <title>猜數字 1A2B - 版本二</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 500px; margin: 30px auto; padding: 20px; background-color: #f4f6f9; }
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 30px auto; padding: 20px; background-color: #f4f6f9; }
     .card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     h1 { margin-top: 0; text-align: center; color: #333; }
     .controls { margin-bottom: 15px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
     input[type="text"] { font-size: 18px; padding: 8px; width: 60%; box-sizing: border-box; }
     button { padding: 9px 15px; font-size: 15px; cursor: pointer; border: none; border-radius: 4px; background: #007bff; color: white; }
-    button:hover { background: #0056b3; }
-    button.btn-reset { background: #6c757d; }
-    button.btn-reset:hover { background: #5a6268; }
+    button.btn-new { background: #28a745; }
     .debug-box { background: #fff3cd; color: #856404; padding: 10px; border-radius: 4px; margin-bottom: 15px; display: none; font-weight: bold; }
     .msg { font-weight: bold; margin: 10px 0; color: #d9534f; }
-    .history { margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px; }
-    .history-item { padding: 6px 0; border-bottom: 1px dotted #ccc; }
+    .game-card { border: 1px solid #ddd; padding: 12px; margin-bottom: 15px; border-radius: 6px; background: #fafafa; }
+    .game-title { font-weight: bold; font-size: 16px; margin-bottom: 8px; display: flex; justify-content: space-between; }
+    .status-done { color: #28a745; }
+    .status-unfinished { color: #dc3545; }
+    .history-item { font-size: 14px; color: #555; padding: 3px 0; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>猜四位數字 (1A2B) - V1</h1>
+    <h1>猜四位數字 (1A2B) - V2 (多局歷史)</h1>
     
     <div class="controls">
       <label>
         <input type="checkbox" id="debugToggle" onchange="toggleDebug()"> 💡 開啟除錯模式
       </label>
-      <button class="btn-reset" onclick="initGame()">🔄 重新開始</button>
+      <button class="btn-new" onclick="startNewGame()">➕ 開啟新一局</button>
     </div>
 
     <div id="debugBox" class="debug-box"></div>
@@ -40,15 +41,13 @@
 
     <div id="msgBox" class="msg"></div>
 
-    <div class="history">
-      <h3>當前猜測紀錄：</h3>
-      <div id="guessList"></div>
-    </div>
+    <h3>多局歷史紀錄：</h3>
+    <div id="gamesContainer"></div>
   </div>
 
   <script>
-    let answer = "";
-    let isGameOver = false;
+    let games = []; // 儲存多局 { id, answer, status: '未完成'|'完成', history: [] }
+    let currentGameIndex = -1;
 
     function generateAnswer() {
       let digits = ["0","1","2","3","4","5","6","7","8","9"];
@@ -56,15 +55,26 @@
       return digits.slice(0, 4).join("");
     }
 
-    function initGame() {
-      answer = generateAnswer();
-      isGameOver = false;
+    function startNewGame() {
+      // 切換開新局時，除錯預設關閉
+      document.getElementById("debugToggle").checked = false;
+      
+      const newGame = {
+        id: games.length + 1,
+        answer: generateAnswer(),
+        status: "未完成",
+        history: []
+      };
+      games.unshift(newGame);
+      currentGameIndex = 0;
+
       document.getElementById("guessInput").value = "";
       document.getElementById("guessInput").disabled = false;
       document.getElementById("submitBtn").disabled = false;
       document.getElementById("msgBox").innerText = "";
-      document.getElementById("guessList").innerHTML = "";
+
       updateDebugDisplay();
+      renderGames();
     }
 
     function toggleDebug() {
@@ -74,9 +84,9 @@
     function updateDebugDisplay() {
       const isChecked = document.getElementById("debugToggle").checked;
       const debugBox = document.getElementById("debugBox");
-      if (isChecked) {
+      if (isChecked && currentGameIndex >= 0 && games[currentGameIndex]) {
         debugBox.style.display = "block";
-        debugBox.innerText = `[除錯顯示] 當前局解答：${answer}`;
+        debugBox.innerText = `[除錯顯示] 第 ${games[currentGameIndex].id} 局解答：${games[currentGameIndex].answer}`;
       } else {
         debugBox.style.display = "none";
       }
@@ -91,48 +101,76 @@
     function checkAB(ans, input) {
       let a = 0, b = 0;
       for (let i = 0; i < 4; i++) {
-        if (input[i] === ans[i]) {
-          a++;
-        } else if (ans.includes(input[i])) {
-          b++;
-        }
+        if (input[i] === ans[i]) a++;
+        else if (ans.includes(input[i])) b++;
       }
       return `${a}A${b}B`;
     }
 
     function makeGuess() {
-      if (isGameOver) return;
+      if (currentGameIndex < 0 || games[currentGameIndex].status === "完成") return;
+      const curGame = games[currentGameIndex];
+
       const inputEl = document.getElementById("guessInput");
       const msgEl = document.getElementById("msgBox");
       const val = inputEl.value.trim();
 
       if (!isValidGuess(val)) {
-        msgEl.innerText = "❌ 請輸入 4 個「數字不重複」的四位數（可包含 0 開頭）！";
+        msgEl.innerText = "❌ 請輸入 4 個「數字不重複」的四位數！";
         return;
       }
 
       msgEl.innerText = "";
-      const result = checkAB(answer, val);
-      
-      const listEl = document.getElementById("guessList");
-      const item = document.createElement("div");
-      item.className = "history-item";
-      item.innerText = `猜測：${val} ➔ 結果：${result}`;
-      listEl.prepend(item);
+      const result = checkAB(curGame.answer, val);
+      const timeStr = new Date().toLocaleTimeString();
 
-      inputEl.value = "";
-      inputEl.focus();
+      curGame.history.push({
+        step: curGame.history.length + 1,
+        guess: val,
+        result: result,
+        time: timeStr
+      });
 
       if (result === "4A0B") {
+        curGame.status = "完成";
         msgEl.innerText = "🎉 恭喜完成本局！結果：4A0B！";
         msgEl.style.color = "#28a745";
-        isGameOver = true;
         document.getElementById("guessInput").disabled = true;
         document.getElementById("submitBtn").disabled = true;
       }
+
+      inputEl.value = "";
+      inputEl.focus();
+      renderGames();
     }
 
-    window.onload = initGame;
+    function renderGames() {
+      const container = document.getElementById("gamesContainer");
+      container.innerHTML = "";
+
+      games.forEach((g, idx) => {
+        const card = document.createElement("div");
+        card.className = "game-card";
+        const statusClass = g.status === "完成" ? "status-done" : "status-unfinished";
+        
+        let historyHTML = g.history.map(h => 
+          `<div class="history-item">第 ${h.step} 次 [${h.time}] 猜測：<strong>${h.guess}</strong> ➔ 判斷：<strong>${h.result}</strong></div>`
+        ).join("");
+
+        if (!historyHTML) historyHTML = "<div class='history-item' style='color:#999;'>尚無猜測紀錄</div>";
+
+        card.innerHTML = `
+          <div class="game-title">
+            <span>第 ${g.id} 局 ${idx === 0 ? "(當前局)" : ""}</span>
+            <span class="${statusClass}">${g.status}</span>
+          </div>
+          ${historyHTML}
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    window.onload = startNewGame;
   </script>
 </body>
 </html>
