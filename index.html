@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>猜數字 1A2B - 版本二</title>
+  <title>猜數字 1A2B - 版本三</title>
   <style>
     body { font-family: Arial, sans-serif; max-width: 600px; margin: 30px auto; padding: 20px; background-color: #f4f6f9; }
     .card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     h1 { margin-top: 0; text-align: center; color: #333; }
+    .user-section { background: #e9ecef; padding: 12px; border-radius: 6px; margin-bottom: 15px; display: flex; gap: 10px; align-items: center; }
     .controls { margin-bottom: 15px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
-    input[type="text"] { font-size: 18px; padding: 8px; width: 60%; box-sizing: border-box; }
+    input[type="text"] { font-size: 16px; padding: 8px; }
     button { padding: 9px 15px; font-size: 15px; cursor: pointer; border: none; border-radius: 4px; background: #007bff; color: white; }
     button.btn-new { background: #28a745; }
     .debug-box { background: #fff3cd; color: #856404; padding: 10px; border-radius: 4px; margin-bottom: 15px; display: none; font-weight: bold; }
@@ -23,31 +24,57 @@
 </head>
 <body>
   <div class="card">
-    <h1>猜四位數字 (1A2B) - V2 (多局歷史)</h1>
+    <h1>猜四位數字 (1A2B) - V3 (雲端代號)</h1>
+
+    <div class="user-section">
+      <input type="text" id="userIdInput" placeholder="請輸入玩家代號 (例如: user01)" style="flex:1;">
+      <button onclick="loadUserData()">載入/切換代號</button>
+    </div>
     
-    <div class="controls">
-      <label>
-        <input type="checkbox" id="debugToggle" onchange="toggleDebug()"> 💡 開啟除錯模式
-      </label>
-      <button class="btn-new" onclick="startNewGame()">➕ 開啟新一局</button>
+    <div id="gamePanel" style="display:none;">
+      <div class="controls">
+        <label>
+          <input type="checkbox" id="debugToggle" onchange="toggleDebug()"> 💡 開啟除錯模式
+        </label>
+        <button class="btn-new" onclick="startNewGame()">➕ 開啟新一局</button>
+      </div>
+
+      <div id="debugBox" class="debug-box"></div>
+
+      <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+        <input type="text" id="guessInput" placeholder="請輸入 4 個不重複數字" maxlength="4" style="flex:1;">
+        <button onclick="makeGuess()" id="submitBtn">送出猜測</button>
+      </div>
+
+      <div id="msgBox" class="msg"></div>
+
+      <h3>雲端存檔歷史紀錄：</h3>
+      <div id="gamesContainer"></div>
     </div>
-
-    <div id="debugBox" class="debug-box"></div>
-
-    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-      <input type="text" id="guessInput" placeholder="請輸入 4 個不重複數字" maxlength="4" autocomplete="off">
-      <button onclick="makeGuess()" id="submitBtn">送出猜測</button>
-    </div>
-
-    <div id="msgBox" class="msg"></div>
-
-    <h3>多局歷史紀錄：</h3>
-    <div id="gamesContainer"></div>
   </div>
 
   <script>
-    let games = []; // 儲存多局 { id, answer, status: '未完成'|'完成', history: [] }
+    // ⚠️ 請修改為您自己的 GAS 部署部署 URL 網址
+    const GAS_API_URL = "https://script.google.com/macros/s/YOUR_GAS_DEPLOYMENT_ID/exec";
+
+    let currentUserId = "";
+    let games = [];
     let currentGameIndex = -1;
+
+    function isValidGuess(val) {
+      if (val.length !== 4 || !/^\d{4}$/.test(val)) return false;
+      let set = new Set(val.split(""));
+      return set.size === 4;
+    }
+
+    function checkAB(ans, input) {
+      let a = 0, b = 0;
+      for (let i = 0; i < 4; i++) {
+        if (input[i] === ans[i]) a++;
+        else if (ans.includes(input[i])) b++;
+      }
+      return `${a}A${b}B`;
+    }
 
     function generateAnswer() {
       let digits = ["0","1","2","3","4","5","6","7","8","9"];
@@ -55,10 +82,41 @@
       return digits.slice(0, 4).join("");
     }
 
+    async function loadUserData() {
+      const uId = document.getElementById("userIdInput").value.trim();
+      if (!uId) {
+        alert("請輸入代號！");
+        return;
+      }
+      currentUserId = uId;
+      document.getElementById("gamePanel").style.display = "block";
+      document.getElementById("msgBox").innerText = "⏳ 載入雲端資料中...";
+
+      try {
+        const resp = await fetch(`${GAS_API_URL}?action=load&userId=${encodeURIComponent(currentUserId)}`);
+        const res = await resp.json();
+        
+        if (res.status === "success") {
+          games = res.games || [];
+          document.getElementById("msgBox").innerText = "";
+          document.getElementById("debugToggle").checked = false;
+
+          if (games.length === 0) {
+            startNewGame();
+          } else {
+            currentGameIndex = 0; // 預設取最新一局
+            updateGameInputState();
+            updateDebugDisplay();
+            renderGames();
+          }
+        }
+      } catch (err) {
+        document.getElementById("msgBox").innerText = "❌ 載入失敗，請檢查網路或 API 網址！";
+      }
+    }
+
     function startNewGame() {
-      // 切換開新局時，除錯預設關閉
       document.getElementById("debugToggle").checked = false;
-      
       const newGame = {
         id: games.length + 1,
         answer: generateAnswer(),
@@ -68,13 +126,18 @@
       games.unshift(newGame);
       currentGameIndex = 0;
 
-      document.getElementById("guessInput").value = "";
-      document.getElementById("guessInput").disabled = false;
-      document.getElementById("submitBtn").disabled = false;
-      document.getElementById("msgBox").innerText = "";
-
+      updateGameInputState();
       updateDebugDisplay();
       renderGames();
+      saveToCloud();
+    }
+
+    function updateGameInputState() {
+      const curGame = games[currentGameIndex];
+      const isDone = curGame && curGame.status === "完成";
+      document.getElementById("guessInput").disabled = isDone;
+      document.getElementById("submitBtn").disabled = isDone;
+      document.getElementById("guessInput").value = "";
     }
 
     function toggleDebug() {
@@ -92,25 +155,9 @@
       }
     }
 
-    function isValidGuess(val) {
-      if (val.length !== 4 || !/^\d{4}$/.test(val)) return false;
-      let set = new Set(val.split(""));
-      return set.size === 4;
-    }
-
-    function checkAB(ans, input) {
-      let a = 0, b = 0;
-      for (let i = 0; i < 4; i++) {
-        if (input[i] === ans[i]) a++;
-        else if (ans.includes(input[i])) b++;
-      }
-      return `${a}A${b}B`;
-    }
-
-    function makeGuess() {
+    async function makeGuess() {
       if (currentGameIndex < 0 || games[currentGameIndex].status === "完成") return;
       const curGame = games[currentGameIndex];
-
       const inputEl = document.getElementById("guessInput");
       const msgEl = document.getElementById("msgBox");
       const val = inputEl.value.trim();
@@ -120,7 +167,7 @@
         return;
       }
 
-      msgEl.innerText = "";
+      msgEl.innerText = "⏳ 判定並儲存中...";
       const result = checkAB(curGame.answer, val);
       const timeStr = new Date().toLocaleTimeString();
 
@@ -137,11 +184,30 @@
         msgEl.style.color = "#28a745";
         document.getElementById("guessInput").disabled = true;
         document.getElementById("submitBtn").disabled = true;
+      } else {
+        msgEl.innerText = "";
       }
 
       inputEl.value = "";
       inputEl.focus();
       renderGames();
+      await saveToCloud();
+    }
+
+    async function saveToCloud() {
+      try {
+        await fetch(GAS_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify({
+            action: "save",
+            userId: currentUserId,
+            games: games
+          })
+        });
+      } catch (err) {
+        console.error("雲端存檔失敗", err);
+      }
     }
 
     function renderGames() {
@@ -161,7 +227,7 @@
 
         card.innerHTML = `
           <div class="game-title">
-            <span>第 ${g.id} 局 ${idx === 0 ? "(當前局)" : ""}</span>
+            <span>第 ${g.id} 局 ${idx === currentGameIndex ? "(當前續玩局)" : ""}</span>
             <span class="${statusClass}">${g.status}</span>
           </div>
           ${historyHTML}
@@ -169,8 +235,6 @@
         container.appendChild(card);
       });
     }
-
-    window.onload = startNewGame;
   </script>
 </body>
 </html>
